@@ -16,11 +16,14 @@ import org.bukkit.block.Dropper;
 import org.bukkit.entity.Player;
 
 import vg.civcraft.mc.civmodcore.itemHandling.ItemMap;
+import vg.civcraft.mc.namelayer.GroupManager.PlayerType;
+import vg.civcraft.mc.namelayer.permission.PermissionType;
 
 import com.github.igotyou.FactoryMod.eggs.FurnCraftChestEgg;
 import com.github.igotyou.FactoryMod.eggs.IFactoryEgg;
 import com.github.igotyou.FactoryMod.eggs.PipeEgg;
 import com.github.igotyou.FactoryMod.factories.Factory;
+import com.github.igotyou.FactoryMod.factories.FurnCraftChestFactory;
 import com.github.igotyou.FactoryMod.recipes.IRecipe;
 import com.github.igotyou.FactoryMod.recipes.Upgraderecipe;
 import com.github.igotyou.FactoryMod.structures.BlockFurnaceStructure;
@@ -46,6 +49,7 @@ public class FactoryModManager {
 	private HashSet<Material> possibleInteractionBlock;
 	private Material factoryInteractionMaterial;
 	private boolean citadelEnabled;
+	private boolean nameLayerEnabled;
 	private boolean logInventories;
 	private int redstonePowerOn;
 	private int redstoneRecipeChange;
@@ -54,16 +58,33 @@ public class FactoryModManager {
 
 	public FactoryModManager(FactoryMod plugin,
 			Material factoryInteractionMaterial, boolean citadelEnabled,
-			int redstonePowerOn, int redstoneRecipeChange,
-			boolean logInventories, long noHealthGracePeriod) {
+			boolean nameLayerEnabled, int redstonePowerOn,
+			int redstoneRecipeChange, boolean logInventories,
+			long noHealthGracePeriod) {
 		this.plugin = plugin;
 		this.factoryInteractionMaterial = factoryInteractionMaterial;
 		this.citadelEnabled = citadelEnabled;
+		this.nameLayerEnabled = nameLayerEnabled;
 		this.redstonePowerOn = redstonePowerOn;
 		this.redstoneRecipeChange = redstoneRecipeChange;
 		this.noHealthGracePeriod = noHealthGracePeriod;
 
 		fileHandler = new FileHandler(this);
+		
+		if(nameLayerEnabled) {
+			//register our own permissions
+			List <PlayerType> memberAndAbove = new LinkedList<PlayerType>();
+			List <PlayerType> modAndAbove = new LinkedList<PlayerType>();
+			memberAndAbove.add(PlayerType.MEMBERS);
+			memberAndAbove.add(PlayerType.MODS);
+			memberAndAbove.add(PlayerType.ADMINS);
+			memberAndAbove.add(PlayerType.OWNER);
+			modAndAbove.add(PlayerType.MODS);
+			modAndAbove.add(PlayerType.ADMINS);
+			modAndAbove.add(PlayerType.OWNER);
+			PermissionType.registerPermission("USE_FACTORY", memberAndAbove);
+			PermissionType.registerPermission("UPGRADE_FACTORY", modAndAbove);
+		}
 
 		factoryCreationRecipes = new HashMap<Class<MultiBlockStructure>, HashMap<ItemMap, IFactoryEgg>>();
 		locations = new HashMap<Location, Factory>();
@@ -176,6 +197,7 @@ public class FactoryModManager {
 			f.deactivate();
 		}
 		factories.remove(f);
+		FurnCraftChestFactory.removePylon(f);
 		for (Location b : f.getMultiBlockStructure().getAllBlocks()) {
 			locations.remove(b);
 		}
@@ -242,9 +264,11 @@ public class FactoryModManager {
 							.get(FurnCraftChestStructure.class);
 					if (eggs != null) {
 						IFactoryEgg egg = null;
-						for(Entry <ItemMap, IFactoryEgg> entry: eggs.entrySet()) {
-							if (entry.getKey().containedExactlyIn(((Chest) (fccs
-								.getChest().getState())).getInventory())) {
+						for (Entry<ItemMap, IFactoryEgg> entry : eggs
+								.entrySet()) {
+							if (entry.getKey().containedExactlyIn(
+									((Chest) (fccs.getChest().getState()))
+											.getInventory())) {
 								egg = entry.getValue();
 								break;
 							}
@@ -285,9 +309,11 @@ public class FactoryModManager {
 							.get(PipeStructure.class);
 					if (eggs != null) {
 						IFactoryEgg egg = null;
-						for(Entry <ItemMap, IFactoryEgg> entry: eggs.entrySet()) {
-							if (entry.getKey().containedExactlyIn((((Dispenser) (ps
-									.getStart().getState())).getInventory()))) {
+						for (Entry<ItemMap, IFactoryEgg> entry : eggs
+								.entrySet()) {
+							if (entry.getKey().containedExactlyIn(
+									(((Dispenser) (ps.getStart().getState()))
+											.getInventory()))) {
 								egg = entry.getValue();
 								break;
 							}
@@ -337,10 +363,11 @@ public class FactoryModManager {
 							.get(BlockFurnaceStructure.class);
 					if (eggs != null) {
 						IFactoryEgg egg = null;
-						for(Entry <ItemMap, IFactoryEgg> entry: eggs.entrySet()) {
-							if (entry.getKey().containedExactlyIn(((Dropper) (bfs
-									.getCenter().getBlock().getState()))
-									.getInventory())) {
+						for (Entry<ItemMap, IFactoryEgg> entry : eggs
+								.entrySet()) {
+							if (entry.getKey().containedExactlyIn(
+									((Dropper) (bfs.getCenter().getBlock()
+											.getState())).getInventory())) {
 								egg = entry.getValue();
 								break;
 							}
@@ -399,6 +426,14 @@ public class FactoryModManager {
 					if (recipe instanceof Upgraderecipe
 							&& ((Upgraderecipe) recipe).getEgg() == egg) {
 						map = calculateTotalSetupCost(superEgg);
+						if (map == null) {
+							plugin.warning("Could not calculate total setupcost for "
+									+ egg.getName()
+									+ ". It's parent factory  "
+									+ superEgg.getName()
+									+ " is impossible to set up");
+							break;
+						}
 						map = map.clone(); // so we dont mess with the original
 											// setup costs
 						map.merge(((Upgraderecipe) recipe).getInput());
